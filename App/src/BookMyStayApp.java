@@ -1,87 +1,95 @@
 import java.util.*;
 
-// 1. Represents an individual optional offering
-class Service {
-    String serviceName;
-    double price;
+// Represents a completed, confirmed booking
+class ConfirmedBooking {
+    String guestName;
+    String roomType;
+    String roomId;
+    double totalCost;
 
-    public Service(String serviceName, double price) {
-        this.serviceName = serviceName;
-        this.price = price;
+    public ConfirmedBooking(String guestName, String roomType, String roomId, double totalCost) {
+        this.guestName = guestName;
+        this.roomType = roomType;
+        this.roomId = roomId;
+        this.totalCost = totalCost;
     }
 
     @Override
     public String toString() {
-        return serviceName + " ($" + price + ")";
+        return String.format("Guest: %-10s | Room: %-10s | ID: %-6s | Total: $%.2f",
+                guestName, roomType, roomId, totalCost);
     }
 }
 
 public class BookMyStayApp {
-    // Existing structures from UC5 & UC6
+    // Inventory and Allocation (from UC6)
     private Map<String, Integer> inventory = new HashMap<>();
     private Map<String, Set<String>> allocatedRooms = new HashMap<>();
 
-    // UC7: Mapping Reservation ID to a List of Services (One-to-Many)
-    private Map<String, List<Service>> addOnManager = new HashMap<>();
+    // UC8: Historical Tracking (Persistence-oriented mindset)
+    private List<ConfirmedBooking> bookingHistory = new ArrayList<>();
 
     public BookMyStayApp() {
-        // Setup inventory
-        inventory.put("Deluxe", 5);
+        inventory.put("Deluxe", 3);
+        inventory.put("Suite", 2);
         allocatedRooms.put("Deluxe", new HashSet<>());
+        allocatedRooms.put("Suite", new HashSet<>());
     }
 
     /**
-     * UC7: Goal is to attach services to a reservation ID
-     * without modifying core inventory logic.
+     * UC8: Confirmation & History Storage
+     * This simulates the moment a booking moves from 'Pending' to 'History'
      */
-    public void addServiceToReservation(String reservationId, Service service) {
-        // If it's the first service for this ID, initialize the list
-        addOnManager.putIfAbsent(reservationId, new ArrayList<>());
+    public void confirmAndRecord(String guest, String type, double cost) {
+        if (inventory.containsKey(type) && inventory.get(type) > 0) {
+            // Allocation logic (UC6)
+            String roomId = type.substring(0, 2).toUpperCase() + "-" + (101 + allocatedRooms.get(type).size());
+            allocatedRooms.get(type).add(roomId);
+            inventory.put(type, inventory.get(type) - 1);
 
-        // Add the service to the list
-        addOnManager.get(reservationId).add(service);
-        System.out.println("Service Added: " + service.serviceName + " to Reservation " + reservationId);
+            // History Recording (UC8)
+            ConfirmedBooking record = new ConfirmedBooking(guest, type, roomId, cost);
+            bookingHistory.add(record);
+
+            System.out.println("[RECORDED] Booking confirmed for " + guest);
+        } else {
+            System.out.println("[FAILED] Could not record booking for " + guest + " (No Inventory)");
+        }
     }
 
-    public void calculateTotalCost(String reservationId, double baseRoomPrice) {
-        double totalAddOnCost = 0;
-        List<Service> services = addOnManager.getOrDefault(reservationId, new ArrayList<>());
+    /**
+     * UC8: Reporting Service
+     * Generates a summary without modifying the underlying data.
+     */
+    public void generateAdminReport() {
+        System.out.println("\n============================================");
+        System.out.println("       OFFICIAL BOOKING HISTORY REPORT      ");
+        System.out.println("============================================");
 
-        System.out.println("\n--- Billing Summary for " + reservationId + " ---");
-        System.out.println("Base Room Price: $" + baseRoomPrice);
-
-        for (Service s : services) {
-            System.out.println("+ " + s);
-            totalAddOnCost += s.price;
+        if (bookingHistory.isEmpty()) {
+            System.out.println("No records found.");
+        } else {
+            double totalRevenue = 0;
+            for (ConfirmedBooking b : bookingHistory) {
+                System.out.println(b);
+                totalRevenue += b.totalCost;
+            }
+            System.out.println("--------------------------------------------");
+            System.out.println("Total Bookings: " + bookingHistory.size());
+            System.out.format("Total Revenue:  $%.2f\n", totalRevenue);
         }
-
-        double finalTotal = baseRoomPrice + totalAddOnCost;
-        System.out.println("Total Additional Charges: $" + totalAddOnCost);
-        System.out.println("Grand Total: $" + finalTotal);
-        System.out.println("-------------------------------------------\n");
+        System.out.println("============================================\n");
     }
 
     public static void main(String[] args) {
         BookMyStayApp app = new BookMyStayApp();
 
-        // Define available services
-        Service breakfast = new Service("Buffet Breakfast", 25.0);
-        Service spa = new Service("Spa Treatment", 120.0);
-        Service wifi = new Service("Premium WiFi", 15.0);
+        // Simulating confirmed transactions
+        app.confirmAndRecord("Alice", "Deluxe", 225.0);
+        app.confirmAndRecord("Bob", "Suite", 450.0);
+        app.confirmAndRecord("Charlie", "Deluxe", 210.0);
 
-        // Simulation: Alice has Reservation ID "RES-101"
-        String aliceResId = "RES-101";
-
-        // Alice selects multiple services
-        app.addServiceToReservation(aliceResId, breakfast);
-        app.addServiceToReservation(aliceResId, spa);
-
-        // Calculate costs (Assuming base room price is $200)
-        app.calculateTotalCost(aliceResId, 200.0);
-
-        // Simulation: Bob has Reservation ID "RES-102"
-        String bobResId = "RES-102";
-        app.addServiceToReservation(bobResId, wifi);
-        app.calculateTotalCost(bobResId, 150.0);
+        // Admin requests the report
+        app.generateAdminReport();
     }
 }
