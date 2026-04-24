@@ -1,75 +1,69 @@
 import java.util.*;
 
-// Domain Model representing Room Details
-class Room {
-    private String type;
-    private double price;
-    private String amenities;
+// 1. New Entity for this Use Case
+class Reservation {
+    private String guestName;
+    private String roomType;
 
-    public Room(String type, double price, String amenities) {
-        this.type = type;
-        this.price = price;
-        this.amenities = amenities;
+    public Reservation(String guestName, String roomType) {
+        this.guestName = guestName;
+        this.roomType = roomType;
     }
 
     @Override
     public String toString() {
-        return String.format("[%s] Price: $%.2f | Amenities: %s", type, price, amenities);
+        return "Reservation [Guest: " + guestName + ", Room Type: " + roomType + "]";
     }
 }
 
-// Search Service - Handles Read-Only Access
-class SearchService {
-    private Map<String, Integer> inventory;
-    private Map<String, Room> roomDetails;
+// 2. New Service to handle the Queue
+class BookingService {
+    // Queue to hold booking requests in arrival order (FIFO)
+    private Queue<Reservation> requestQueue = new LinkedList<>();
 
-    public SearchService(Map<String, Integer> inventory, Map<String, Room> roomDetails) {
-        this.inventory = inventory;
-        this.roomDetails = roomDetails;
+    public void addBookingRequest(String guestName, String roomType) {
+        Reservation request = new Reservation(guestName, roomType);
+        requestQueue.add(request);
+        System.out.println(">>> Added to Queue: " + guestName + " requested " + roomType);
     }
 
-    public void displayAvailableRooms() {
-        System.out.println("--- Available Rooms ---");
-        boolean found = false;
-
-        for (Map.Entry<String, Integer> entry : inventory.entrySet()) {
-            // Validation: Only display rooms with availability > 0
-            if (entry.getValue() > 0) {
-                Room details = roomDetails.get(entry.getKey());
-                if (details != null) {
-                    System.out.println(details + " | Units Available: " + entry.getValue());
-                    found = true;
-                }
+    public void displayPendingRequests() {
+        System.out.println("\n--- Current Booking Request Queue (First-Come-First-Served) ---");
+        if (requestQueue.isEmpty()) {
+            System.out.println("No pending requests.");
+        } else {
+            for (Reservation res : requestQueue) {
+                System.out.println(res);
             }
         }
-
-        if (!found) {
-            System.out.println("No rooms available at this time.");
-        }
-        System.out.println("------------------------\n");
+        System.out.println("--------------------------------------------------------------\n");
     }
 }
 
-// Class name updated to match the filename 'BookMyStayApp.java'
+// 3. Updated Main Class based on your IDE screenshot
 public class BookMyStayApp {
     public static void main(String[] args) {
-        // 1. Initialize Inventory (System State)
+        // --- Setup from previous Use Cases ---
         Map<String, Integer> inventory = new HashMap<>();
         inventory.put("Deluxe", 5);
         inventory.put("Suite", 2);
-        inventory.put("Standard", 0); // This will be filtered out
+        inventory.put("Standard", 0);
 
-        // 2. Initialize Room Metadata
-        Map<String, Room> roomMetadata = new HashMap<>();
-        roomMetadata.put("Deluxe", new Room("Deluxe", 150.0, "WiFi, King Bed"));
-        roomMetadata.put("Suite", new Room("Suite", 300.0, "WiFi, Jacuzzi"));
-        roomMetadata.put("Standard", new Room("Standard", 80.0, "WiFi, Single Bed"));
+        // --- Use Case 5 Implementation ---
+        BookingService bookingService = new BookingService();
 
-        // 3. Search Service Execution
-        SearchService searchService = new SearchService(inventory, roomMetadata);
-        searchService.displayAvailableRooms();
+        System.out.println("System: Receiving booking requests during peak hours...");
 
-        // 4. Verify State remains unchanged (Read-Only Access check)
-        System.out.println("Post-Search Verification: Deluxe count is still " + inventory.get("Deluxe"));
+        // Simulating guests arriving at different times
+        bookingService.addBookingRequest("Alice", "Deluxe");
+        bookingService.addBookingRequest("Bob", "Standard");
+        bookingService.addBookingRequest("Charlie", "Suite");
+        bookingService.addBookingRequest("Diana", "Deluxe");
+
+        // Displaying the queue to prove order preservation
+        bookingService.displayPendingRequests();
+
+        System.out.println("Notice: No rooms have been deducted from inventory yet.");
+        System.out.println("Inventory remains: " + inventory);
     }
 }
