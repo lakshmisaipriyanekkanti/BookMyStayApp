@@ -1,95 +1,78 @@
 import java.util.*;
 
-// Represents a completed, confirmed booking
-class ConfirmedBooking {
-    String guestName;
-    String roomType;
-    String roomId;
-    double totalCost;
-
-    public ConfirmedBooking(String guestName, String roomType, String roomId, double totalCost) {
-        this.guestName = guestName;
-        this.roomType = roomType;
-        this.roomId = roomId;
-        this.totalCost = totalCost;
-    }
-
-    @Override
-    public String toString() {
-        return String.format("Guest: %-10s | Room: %-10s | ID: %-6s | Total: $%.2f",
-                guestName, roomType, roomId, totalCost);
+// Custom Exception for domain-specific errors
+class BookingException extends Exception {
+    public BookingException(String message) {
+        super(message);
     }
 }
 
 public class BookMyStayApp {
-    // Inventory and Allocation (from UC6)
     private Map<String, Integer> inventory = new HashMap<>();
-    private Map<String, Set<String>> allocatedRooms = new HashMap<>();
-
-    // UC8: Historical Tracking (Persistence-oriented mindset)
-    private List<ConfirmedBooking> bookingHistory = new ArrayList<>();
 
     public BookMyStayApp() {
-        inventory.put("Deluxe", 3);
+        // Note: Inventory keys are case-sensitive
+        inventory.put("Deluxe", 1);
         inventory.put("Suite", 2);
-        allocatedRooms.put("Deluxe", new HashSet<>());
-        allocatedRooms.put("Suite", new HashSet<>());
     }
 
     /**
-     * UC8: Confirmation & History Storage
-     * This simulates the moment a booking moves from 'Pending' to 'History'
+     * UC9: Validation Logic
+     * Ensures input is valid BEFORE any system state changes occur.
      */
-    public void confirmAndRecord(String guest, String type, double cost) {
-        if (inventory.containsKey(type) && inventory.get(type) > 0) {
-            // Allocation logic (UC6)
-            String roomId = type.substring(0, 2).toUpperCase() + "-" + (101 + allocatedRooms.get(type).size());
-            allocatedRooms.get(type).add(roomId);
-            inventory.put(type, inventory.get(type) - 1);
+    public void validateRequest(String roomType) throws BookingException {
+        // 1. Check for null or empty input
+        if (roomType == null || roomType.trim().isEmpty()) {
+            throw new BookingException("Validation Error: Room type cannot be empty.");
+        }
 
-            // History Recording (UC8)
-            ConfirmedBooking record = new ConfirmedBooking(guest, type, roomId, cost);
-            bookingHistory.add(record);
+        // 2. Check for existence (Case-Sensitive check)
+        if (!inventory.containsKey(roomType)) {
+            throw new BookingException("Validation Error: Room type '" + roomType + "' does not exist (Check case sensitivity).");
+        }
 
-            System.out.println("[RECORDED] Booking confirmed for " + guest);
-        } else {
-            System.out.println("[FAILED] Could not record booking for " + guest + " (No Inventory)");
+        // 3. Check for exhaustion
+        if (inventory.get(roomType) <= 0) {
+            throw new BookingException("Availability Error: No rooms available for type '" + roomType + "'.");
         }
     }
 
-    /**
-     * UC8: Reporting Service
-     * Generates a summary without modifying the underlying data.
-     */
-    public void generateAdminReport() {
-        System.out.println("\n============================================");
-        System.out.println("       OFFICIAL BOOKING HISTORY REPORT      ");
-        System.out.println("============================================");
+    public void processBooking(String guestName, String roomType) {
+        System.out.println("Processing request for " + guestName + " [" + roomType + "]...");
+        try {
+            // Guarding the system state
+            validateRequest(roomType);
 
-        if (bookingHistory.isEmpty()) {
-            System.out.println("No records found.");
-        } else {
-            double totalRevenue = 0;
-            for (ConfirmedBooking b : bookingHistory) {
-                System.out.println(b);
-                totalRevenue += b.totalCost;
-            }
-            System.out.println("--------------------------------------------");
-            System.out.println("Total Bookings: " + bookingHistory.size());
-            System.out.format("Total Revenue:  $%.2f\n", totalRevenue);
+            // If we reach here, input is valid - proceed with allocation
+            inventory.put(roomType, inventory.get(roomType) - 1);
+            System.out.println("[SUCCESS] Booking confirmed for " + guestName);
+
+        } catch (BookingException e) {
+            // Graceful Failure Handling
+            System.err.println("[REJECTED] " + e.getMessage());
+        } catch (Exception e) {
+            System.err.println("[CRITICAL ERROR] An unexpected error occurred: " + e.getMessage());
+        } finally {
+            System.out.println("System remains stable and ready for next request.\n");
         }
-        System.out.println("============================================\n");
     }
 
     public static void main(String[] args) {
         BookMyStayApp app = new BookMyStayApp();
 
-        // Simulating confirmed transactions
-        app.confirmAndRecord("Alice", "Deluxe", 225.0);
-        app.confirmAndRecord("Bob", "Suite", 450.0);
-        app.confirmAndRecord("Charlie", "Deluxe", 210.0);
+        // Scenario 1: Valid request
+        app.processBooking("Alice", "Deluxe");
 
-        // Admin requests the report
-        app.generateAdminReport();
+        // Scenario 2: Invalid Room Type (Case Sensitivity)
+        app.processBooking("Bob", "deluxe");
+
+        // Scenario 3: Room Type does not exist
+        app.processBooking("Charlie", "Penthouse");
+
+        // Scenario 4: Inventory Exhausted
+        app.processBooking("Diana", "Deluxe");
+
+        // Scenario 5: Invalid Input
+        app.processBooking("Eve", "");
     }
 }
