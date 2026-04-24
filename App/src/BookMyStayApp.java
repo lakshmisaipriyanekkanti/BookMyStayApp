@@ -1,79 +1,74 @@
 import java.util.*;
 
 public class BookMyStayApp {
-    // Current Inventory
+    // Shared Mutable State
     private Map<String, Integer> inventory = new HashMap<>();
-
-    // Tracking active allocations (ReservationID -> RoomID)
-    private Map<String, String> activeBookings = new HashMap<>();
-
-    // UC10: Stack for Rollback (LIFO) - Tracks recently released room IDs
-    private Stack<String> releasedRoomStack = new Stack<>();
+    private Queue<String> requestQueue = new LinkedList<>();
+    private final Object lock = new Object(); // Explicit lock object for synchronization
 
     public BookMyStayApp() {
-        inventory.put("Deluxe", 5);
-        inventory.put("Suite", 2);
+        // Only 1 room available to test race condition prevention
+        inventory.put("Deluxe", 1);
     }
 
     /**
-     * Helper to simulate a booking (UC6/UC8 logic)
+     * UC11: Thread-safe Request Intake
      */
-    public void confirmBooking(String resId, String type, String roomId) {
-        activeBookings.put(resId, roomId);
-        inventory.put(type, inventory.get(type) - 1);
-        System.out.println("[CONFIRMED] " + resId + " assigned Room: " + roomId);
-    }
-
-    /**
-     * UC10: Cancellation & Inventory Rollback
-     * This method ensures the system state is reverted safely.
-     */
-    public void cancelBooking(String resId, String roomType) {
-        System.out.println("\nInitiating cancellation for: " + resId + "...");
-
-        // 1. Validation: Ensure reservation exists
-        if (!activeBookings.containsKey(resId)) {
-            System.err.println("[ERROR] Cancellation Failed: Reservation ID " + resId + " not found.");
-            return;
+    public void submitRequest(String guestName) {
+        synchronized (lock) {
+            requestQueue.add(guestName);
+            System.out.println(guestName + " submitted a request.");
         }
-
-        // 2. Controlled Mutation: Get the Room ID and remove from active list
-        String roomId = activeBookings.remove(resId);
-
-        // 3. Stack Rollback: Push released room ID to the stack
-        releasedRoomStack.push(roomId);
-
-        // 4. Inventory Restoration: Increment count immediately
-        inventory.put(roomType, inventory.get(roomType) + 1);
-
-        System.out.println("[SUCCESS] Cancellation Complete.");
-        System.out.println("Room " + roomId + " has been added to the Rollback Stack.");
-        System.out.println("Inventory for " + roomType + " restored to: " + inventory.get(roomType));
     }
 
-    public void displaySystemState() {
-        System.out.println("\n--- Final System State ---");
-        System.out.println("Current Inventory: " + inventory);
-        System.out.println("Active Bookings: " + activeBookings);
-        System.out.println("Rollback Stack (Released Rooms): " + releasedRoomStack);
-        System.out.println("--------------------------\n");
+    /**
+     * UC11: Thread-safe Allocation (Critical Section)
+     * Synchronized ensures that only one thread can decrement inventory at a time.
+     */
+    public void processBooking(String threadName) {
+        synchronized (lock) {
+            if (!requestQueue.isEmpty()) {
+                String guest = requestQueue.poll();
+                String type = "Deluxe";
+
+                System.out.println("[" + threadName + "] Processing for: " + guest);
+
+                if (inventory.get(type) > 0) {
+                    // Simulate processing time to increase chance of race condition
+                    try { Thread.sleep(100); } catch (InterruptedException e) {}
+
+                    inventory.put(type, inventory.get(type) - 1);
+                    System.out.println("[SUCCESS] " + guest + " secured the last Deluxe room.");
+                } else {
+                    System.out.println("[FAILED] " + guest + " - No rooms left.");
+                }
+            }
+        }
     }
 
     public static void main(String[] args) {
         BookMyStayApp app = new BookMyStayApp();
 
-        // Step 1: Simulate active state
-        app.confirmBooking("RES-101", "Deluxe", "DX-101");
-        app.confirmBooking("RES-102", "Deluxe", "DX-102");
-        app.confirmBooking("RES-103", "Suite", "ST-201");
+        // 1. Submit requests
+        app.submitRequest("Alice");
+        app.submitRequest("Bob");
 
-        // Step 2: Valid Cancellation
-        app.cancelBooking("RES-102", "Deluxe");
+        // 2. Simulate concurrent processing using Threads
+        Thread thread1 = new Thread(() -> app.processBooking("Processor-Thread-1"));
+        Thread thread2 = new Thread(() -> app.processBooking("Processor-Thread-2"));
 
-        // Step 3: Invalid Cancellation (Already removed or never existed)
-        app.cancelBooking("RES-999", "Suite");
+        System.out.println("\n--- Starting Concurrent Simulation ---");
+        thread1.start();
+        thread2.start();
 
-        // Step 4: Final State Check
-        app.displaySystemState();
+        // Wait for threads to finish
+        try {
+            thread1.join();
+            thread2.join();
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+
+        System.out.println("\nFinal Inventory State: " + app.inventory);
     }
 }
