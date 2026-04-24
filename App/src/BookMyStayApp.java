@@ -1,78 +1,79 @@
 import java.util.*;
 
-// Custom Exception for domain-specific errors
-class BookingException extends Exception {
-    public BookingException(String message) {
-        super(message);
-    }
-}
-
 public class BookMyStayApp {
+    // Current Inventory
     private Map<String, Integer> inventory = new HashMap<>();
 
+    // Tracking active allocations (ReservationID -> RoomID)
+    private Map<String, String> activeBookings = new HashMap<>();
+
+    // UC10: Stack for Rollback (LIFO) - Tracks recently released room IDs
+    private Stack<String> releasedRoomStack = new Stack<>();
+
     public BookMyStayApp() {
-        // Note: Inventory keys are case-sensitive
-        inventory.put("Deluxe", 1);
+        inventory.put("Deluxe", 5);
         inventory.put("Suite", 2);
     }
 
     /**
-     * UC9: Validation Logic
-     * Ensures input is valid BEFORE any system state changes occur.
+     * Helper to simulate a booking (UC6/UC8 logic)
      */
-    public void validateRequest(String roomType) throws BookingException {
-        // 1. Check for null or empty input
-        if (roomType == null || roomType.trim().isEmpty()) {
-            throw new BookingException("Validation Error: Room type cannot be empty.");
-        }
-
-        // 2. Check for existence (Case-Sensitive check)
-        if (!inventory.containsKey(roomType)) {
-            throw new BookingException("Validation Error: Room type '" + roomType + "' does not exist (Check case sensitivity).");
-        }
-
-        // 3. Check for exhaustion
-        if (inventory.get(roomType) <= 0) {
-            throw new BookingException("Availability Error: No rooms available for type '" + roomType + "'.");
-        }
+    public void confirmBooking(String resId, String type, String roomId) {
+        activeBookings.put(resId, roomId);
+        inventory.put(type, inventory.get(type) - 1);
+        System.out.println("[CONFIRMED] " + resId + " assigned Room: " + roomId);
     }
 
-    public void processBooking(String guestName, String roomType) {
-        System.out.println("Processing request for " + guestName + " [" + roomType + "]...");
-        try {
-            // Guarding the system state
-            validateRequest(roomType);
+    /**
+     * UC10: Cancellation & Inventory Rollback
+     * This method ensures the system state is reverted safely.
+     */
+    public void cancelBooking(String resId, String roomType) {
+        System.out.println("\nInitiating cancellation for: " + resId + "...");
 
-            // If we reach here, input is valid - proceed with allocation
-            inventory.put(roomType, inventory.get(roomType) - 1);
-            System.out.println("[SUCCESS] Booking confirmed for " + guestName);
-
-        } catch (BookingException e) {
-            // Graceful Failure Handling
-            System.err.println("[REJECTED] " + e.getMessage());
-        } catch (Exception e) {
-            System.err.println("[CRITICAL ERROR] An unexpected error occurred: " + e.getMessage());
-        } finally {
-            System.out.println("System remains stable and ready for next request.\n");
+        // 1. Validation: Ensure reservation exists
+        if (!activeBookings.containsKey(resId)) {
+            System.err.println("[ERROR] Cancellation Failed: Reservation ID " + resId + " not found.");
+            return;
         }
+
+        // 2. Controlled Mutation: Get the Room ID and remove from active list
+        String roomId = activeBookings.remove(resId);
+
+        // 3. Stack Rollback: Push released room ID to the stack
+        releasedRoomStack.push(roomId);
+
+        // 4. Inventory Restoration: Increment count immediately
+        inventory.put(roomType, inventory.get(roomType) + 1);
+
+        System.out.println("[SUCCESS] Cancellation Complete.");
+        System.out.println("Room " + roomId + " has been added to the Rollback Stack.");
+        System.out.println("Inventory for " + roomType + " restored to: " + inventory.get(roomType));
+    }
+
+    public void displaySystemState() {
+        System.out.println("\n--- Final System State ---");
+        System.out.println("Current Inventory: " + inventory);
+        System.out.println("Active Bookings: " + activeBookings);
+        System.out.println("Rollback Stack (Released Rooms): " + releasedRoomStack);
+        System.out.println("--------------------------\n");
     }
 
     public static void main(String[] args) {
         BookMyStayApp app = new BookMyStayApp();
 
-        // Scenario 1: Valid request
-        app.processBooking("Alice", "Deluxe");
+        // Step 1: Simulate active state
+        app.confirmBooking("RES-101", "Deluxe", "DX-101");
+        app.confirmBooking("RES-102", "Deluxe", "DX-102");
+        app.confirmBooking("RES-103", "Suite", "ST-201");
 
-        // Scenario 2: Invalid Room Type (Case Sensitivity)
-        app.processBooking("Bob", "deluxe");
+        // Step 2: Valid Cancellation
+        app.cancelBooking("RES-102", "Deluxe");
 
-        // Scenario 3: Room Type does not exist
-        app.processBooking("Charlie", "Penthouse");
+        // Step 3: Invalid Cancellation (Already removed or never existed)
+        app.cancelBooking("RES-999", "Suite");
 
-        // Scenario 4: Inventory Exhausted
-        app.processBooking("Diana", "Deluxe");
-
-        // Scenario 5: Invalid Input
-        app.processBooking("Eve", "");
+        // Step 4: Final State Check
+        app.displaySystemState();
     }
 }
